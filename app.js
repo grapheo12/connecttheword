@@ -89,7 +89,7 @@ app.get('/conndata', (req, res) => {
 
 app.post('/wordpost', uec, (req, res) => {
     wordbuff[req.body.tokenId] = req.body.word;
-    if (wordbuff.length == 3){
+    if (disconnector in wordbuff && person1 in wordbuff && person2 in wordbuff){
         connect = false;
         person1 = null;
         person2 = null;
