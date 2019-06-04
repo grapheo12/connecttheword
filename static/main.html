@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+    <head>    
+        <title>Game Page</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+    </head>
+    <body>
+        <div id="player-box-container">
+            <span>Active Players</span>
+            <div id="player-box"></div>
+        </div>
+        <div id="msg-box-container">
+            <form id="msg-box">
+                <input type="text" placeholder="Enter your message" id="msg-input">
+                <input type="submit">
+            </form>
+            <form id="connect-box">
+                <select id="connect-select">
+                    <option value="0"></option>
+                </select>
+                <input type="submit">
+            </form>
+        </div>
+        <div id="modal-container">
+            <span id="modal-generic">Connection going on.......</span>
+            <form id="modal-submitter">
+                <span id="modal-timer"></span> second(s) remaining <br>
+                <input type="text" placeholder="Enter your word" id="modal-word">
+                <input type="submit">
+            </form>
+        </div>
+        <a href="/disconnect" id="disclink" target="_blank">Disconnect</a>
+        <div id="word-box"></div>
+        <div id="feed-container"></div>
+
+
+        <script>
+            function TimeKeeper(fname, millis){
+                this.timer = null;
+                this.interval = millis;
+                this.func = fname;
+                this.start = () => {
+                    this.timer = setInterval(this.func, this.interval);
+                }
+                this.stop = () => {
+                    try{
+                        clearInterval(this.timer);
+                    }catch(err){
+                        console.log("No valid timer assigned!");
+                    }
+                }
+            }
+
+            function OneSecCounter(fname, callback, duration){
+                this.timer = null;
+                this.duration = duration;
+                this.func = fname;
+                this.cb = callback;
+                this.start = () => {
+                    this.timer = setInterval(() => {
+                        this.func();
+                        this.duration--;
+                        if (this.duration < 0)
+                            this.stop();
+                    }, 1000);
+                }
+                this.stop = () => {
+                    try{
+                        clearInterval(this.timer);
+                        this.cb();
+                    }catch(err){
+                        console.log("No valid timer assigned!");
+                    }
+                }
+            }
+                
+
+            var playermap = {};
+
+            function ping(){
+                //HTTP polling agent
+                $.get('/playerInfo', (data, status) => {
+                    if (status == 'success'){
+                        $("#player-box").html("");
+                        let tempVal = $("#connect-select").val();
+                        $("#connect-select").html("");
+                        playermap = {};
+                        let dat = JSON.parse(data);
+                        // console.log(dat);
+                        for (let i = 0; i < dat.count; i++){
+                            let player = dat.Players[i];
+                            let you = ((player.tokenId == Number(sessionStorage.getItem('tokenId'))) ? "&nbsp;(You)&nbsp;" : ""); 
+                            $("#player-box").html($("#player-box").html() + 
+                            `<span class='player'>\n
+                                <span class='player-num'>${player.tokenId}</span>:\n
+                                <span class='player-name'>${player.name}<b>${you}</b></span>\n
+                            </span><br>`);
+                            
+                            playermap[player.tokenId] = player.name;
+                            
+                            $("#connect-select").html($("#connect-select").html() + `<option value="${player.tokenId}">${player.tokenId}: ${player.name}</option>\n`);
+                            $("#connect-select").val(tempVal);
+
+                        }
+                    }
+                });
+
+                $.get('/feedControl?postcount=' + sessionStorage.getItem('postCount'), (data, status) => {
+                    if (data == "connect"){
+                        // alert("Connect going on");
+                        let x = sessionStorage.getItem('tokenId');
+                        $.get("/conndata", (data, status) => {
+                            if (data != "No connection"){
+                                let dat = JSON.parse(data);
+                                $("#modal-container").show();
+                                if (x == dat.person1 || x == dat.person2 || x == dat.disconnector){
+                                    timedEvent.stop();
+                                    $("#modal-submitter").show();
+                                    let count = 10;
+                                    let newtime;
+                                    function a() {$("#modal-timer").text(count); count--; console.log(count);};
+                                    function b() {
+                                        $("#modal-submitter").trigger("submit");
+                                        $("#modal-submitter").hide();
+                                        timedEvent.start();
+                                    }
+
+                                    newtime = new OneSecCounter(a, b, 10);
+                                    newtime.start();
+                                    
+                                }
+                            }else
+                                alert("Server failure!");
+                        });
+                    }else{
+                        $("#modal-container").hide();
+                        let dat = JSON.parse(data);
+                        for (let i = 0; i < dat.n; i++){
+                            let post = dat.posts[i];
+                            let you = ((post.tokenId == Number(sessionStorage.getItem('tokenId'))) ? "&nbsp;(You)&nbsp;" : ""); 
+                            $("#feed-container").html(`
+                            \n<div class="post">\n
+                                <div class="post-meta">\n
+                                    <span class="post-meta-name">${playermap[post.tokenId]}</span> [<span class="post-meta-tokenId">${post.tokenId} ${you}</span>]\n
+                                </div>\n
+                                <div class="post-body">${post.msg}</div>\n
+                                ` + $("#feed-container").html());
+                        }
+                        sessionStorage.setItem('postCount', String(Number(sessionStorage.getItem('postCount')) + dat.n));
+                    }
+                });
+
+                $.get('/revealword', (data, status) =>{
+                    $("#word-box").text(data);
+                    if (data != " ")
+                        $("#disclink").hide();
+                    else
+                        $("#disclink").show();
+                });
+
+
+
+            }
+            var timedEvent = new TimeKeeper(ping, 1000);
+
+            function postMsg(){
+                let msg = $("#msg-input").val();
+                msg = msg.replace("<", "");
+                msg = msg.replace(">", "");
+                msg = msg.replace("'", "");
+                msg = msg.replace('"', "");
+
+                $.post('/postmsg', {tokenId: sessionStorage.getItem('tokenId'), msg: msg}, (data, status) => {
+                    if (status != "success")
+                        alert("Server failure!");
+                    else
+                        $("#msg-input").val("");
+                });
+            }
+            
+            function postConn(){
+                let connect = $("#connect-select").val();
+                $.post('/reqConn', {person1: connect, person2: sessionStorage.getItem('tokenId')}, (data, status) => {
+                    if (data != "Ok"){
+                        alert("Server failure!");
+                    }
+                });
+            }
+
+            function postWord(){
+                let word = $("#modal-word").val();
+                $.post('/wordpost', {tokenId: sessionStorage.getItem('tokenId'), word: word}, (data, status) => {
+                    if (data == "Ok"){
+                        $("#modal-container").hide();
+                        $("#modal-word").val("");
+                    }
+                });
+            }
+
+            $("#modal-submitter").submit((e) => {
+                e.preventDefault();
+                postWord();
+            });
+
+            $("#msg-box").submit((e) => {
+                e.preventDefault();
+                postMsg();
+            });
+
+            $("#connect-box").submit((e) => {
+                e.preventDefault();
+                postConn();
+            });
+
+
+            $(document).ready(() => {
+                sessionStorage.setItem('postCount', '0');
+                $("#modal-submitter").hide();
+                $("#modal-container").hide();
+                timedEvent.start();
+            });
+        </script>
+    </body>
+</html>
+
+
+
+
+
+
+

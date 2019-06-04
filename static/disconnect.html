@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Disconnector Form</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+    </head>
+    <body>
+        <form id="disc-form">
+            <h1>Enter your word:</h1><br>
+            <input type="text" id="word">
+            <input type="submit">
+        </form>
+        <script>
+            $("#disc-form").submit((e) => {
+                e.preventDefault();
+
+                $.post('/submitword', {tokenId: sessionStorage.getItem('tokenId'), word: $("#word").val()}, (data, status) => {
+                    if (data == "Ok")
+                        window.close();
+                });
+            });
+            
+        </script>
+    </body>
+</html>
